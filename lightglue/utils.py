@@ -1,4 +1,5 @@
 import collections.abc as collections
+import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, List, Optional, Tuple, Union
@@ -7,6 +8,8 @@ import cv2
 import kornia
 import numpy as np
 import torch
+
+import supervisely as sly
 
 
 class ImagePreprocessor:
@@ -64,8 +67,7 @@ def batch_to_device(batch: dict, device: str = "cpu", non_blocking: bool = True)
 def rbd(data: dict) -> dict:
     """Remove batch dimension from elements in data"""
     return {
-        k: v[0] if isinstance(v, (torch.Tensor, np.ndarray, list)) else v
-        for k, v in data.items()
+        k: v[0] if isinstance(v, (torch.Tensor, np.ndarray, list)) else v for k, v in data.items()
     }
 
 
@@ -79,6 +81,18 @@ def read_image(path: Path, grayscale: bool = False) -> np.ndarray:
         raise IOError(f"Could not read image at {path}.")
     if not grayscale:
         image = image[..., ::-1]
+    return image
+
+
+def read_image_from_url(url: Path) -> np.ndarray:
+    """Fetch the image from the URL"""
+
+    response = urllib.request.urlopen(url)
+    image_data = response.read()
+
+    image_array = np.asarray(bytearray(image_data), dtype=np.uint8)
+    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
     return image
 
 
@@ -118,13 +132,24 @@ def resize_image(
         "nearest": cv2.INTER_NEAREST,
         "area": cv2.INTER_AREA,
     }[interp]
-    return cv2.resize(image, (w_new, h_new), interpolation=mode), scale
+    return (cv2.resize(image, (w_new, h_new), interpolation=mode),)
 
 
 def load_image(path: Path, resize: int = None, **kwargs) -> torch.Tensor:
     image = read_image(path)
     if resize is not None:
-        image, _ = resize_image(image, resize, **kwargs)
+        # image = resize_image(image, resize, **kwargs)[0]
+        image = sly.image.resize(image, out_size=resize)
+    return numpy_image_to_torch(image)
+
+
+@sly.timeit
+def load_image_from_url(url: Path, resize: int = None, **kwargs) -> torch.Tensor:
+    image = read_image_from_url(url)
+    if resize is not None:
+        # image = resize_image(image, resize, **kwargs)
+        image = sly.image.resize(image, out_size=resize)
+
     return numpy_image_to_torch(image)
 
 

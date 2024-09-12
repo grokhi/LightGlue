@@ -137,6 +137,10 @@ def resize_image(
 
 def load_image(path: Path, resize: int = None, **kwargs) -> torch.Tensor:
     image = read_image(path)
+    if kwargs.get("crop_vertically") is not None:
+        x0, x1 = kwargs.get("crop_vertically")
+        image = image[:, x0:x1, :]
+
     if resize is not None:
         # image = resize_image(image, resize, **kwargs)[0]
         image = sly.image.resize(image, out_size=resize)
